@@ -28,7 +28,9 @@
     { date: '2026-11-22', walkMin: 36, strength: false, glucoseBefore: '', glucoseAfter: '', walkKm: 3.98, kcalActive: 318, kcalTotal: 388, elevM: 70, pace: '8:56', hrAvg: 136 },
     { date: '2026-11-23', walkMin: 35, strength: true, glucoseBefore: '', glucoseAfter: '', walkKm: 4.01, kcalActive: 318, kcalTotal: 387, elevM: 69, pace: '8:49', hrAvg: 140 }
   ];
-  const PESOS = [{ date: '2026-11-16', kg: 93.3 }, { date: '2026-11-17', kg: 93.3 }];
+  // 20 y 22/11: pesos que Jorge dio de palabra (93,0 kg). Misma lógica que el resto de la precarga:
+  // por fecha, lo apuntado aquí o en Mi entrenador manda, y «borrados-pesos» los oculta.
+  const PESOS = [{ date: '2026-11-16', kg: 93.3 }, { date: '2026-11-17', kg: 93.3 }, { date: '2026-11-20', kg: 93.0 }, { date: '2026-11-22', kg: 93.0 }];
   const INITIAL_WEIGHTS = [{ date: '2026-11-01', kg: 92.7 }];
   const SEED_WAIST = [{ date: '2026-11-26', cm: 104.6 }];
 
@@ -256,8 +258,34 @@
     if (inRange(j.goals.prot, 20, 400)) g.prot = j.goals.prot;
     return Object.keys(g).length ? { goals: g } : null;
   }
-  /** Mi plato: forma aún desconocida. Busca listas de objetos con fecha + kcal (+ proteína). */
+  /** Mi plato guarda todo en localStorage «mi-plato:v1» = { schema, data: { comidas: [...] } } (y su exportación
+   *  es { app:'mi-plato', schema, data: { comidas, ... } }). Cada comida: { fecha:'AAAA-MM-DD', hora, toma,
+   *  items:[{ g, por100:{ kcal, p, ... } }] }. No guarda kcal por comida: se suman los alimentos (g/100 × por100). */
+  function platoMeals(list) {
+    const out = [];
+    for (const m of list.slice(0, 50000)) {
+      if (!m || typeof m !== 'object' || !isDate(m.fecha) || !Array.isArray(m.items) || !m.items.length) continue;
+      let kcal = 0, p = 0, ok = true;
+      for (const it of m.items) {
+        const per = it && it.por100;
+        if (!per || !Number.isFinite(it.g) || it.g < 0 || !Number.isFinite(per.kcal)) { ok = false; break; }
+        kcal += (it.g / 100) * per.kcal;
+        p += (it.g / 100) * (Number.isFinite(per.p) ? per.p : 0);
+      }
+      if (ok && inRange(kcal, 0, 20000)) out.push({ date: m.fecha, kcal: Math.round(kcal), p: inRange(p, 0, 1000) ? Math.round(p * 10) / 10 : 0 });
+    }
+    return out;
+  }
+  /** Acepta la raíz de localStorage ({schema,data:{comidas}}), la exportación ({app,data:{comidas}}) o `data` suelto. */
   function extractPlato(root) {
+    if (root && typeof root === 'object') {
+      const d = root.data && typeof root.data === 'object' && !Array.isArray(root.data) ? root.data : root;
+      if (Array.isArray(d.comidas)) return platoMeals(d.comidas);
+    }
+    return extractPlatoGeneric(root);
+  }
+  /** Respaldo para formas no previstas: busca listas de objetos con fecha + kcal (+ proteína). */
+  function extractPlatoGeneric(root) {
     const out = [];
     const seen = new Set();
     const num = (o, keys) => { for (const k of keys) if (typeof o[k] === 'number' && Number.isFinite(o[k])) return o[k]; return NaN; };

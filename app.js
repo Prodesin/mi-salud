@@ -109,24 +109,26 @@
         <p class="plain"><span class="pill ${c.cls}"><i></i>${c.label}</span></p>
         <p class="plain">${bpAdvice(c)}</p>`;
     } else {
-      const late = np.hour >= 13;
+      const h = np.hour;
+      const [cls, msg] = h < 13 ? ['soft', 'Hoy toca antes de comer.']
+        : h < 16 ? ['urgent', 'Es la hora: tómatela antes de comer.']
+        : ['soft', 'Hoy aún no la has apuntado. Si te la tomaste, apúntala; si no, mañana antes de comer.'];
       const last = model.bp.filter((x) => x.date < t).pop();
-      body = `<div class="notice ${late ? 'urgent' : 'soft'}">${late
-        ? 'Aún no te has tomado la tensión hoy. Ya es la hora de comer: tómatela ahora.'
-        : 'Aún no te has tomado la tensión hoy; toca antes de comer.'}</div>
+      body = `<div class="notice ${cls}">${msg}</div>
         ${last ? `<p class="meta" style="margin-top:10px">Última lectura: ${last.sys}/${last.dia} mmHg, ${esc(M.longDate(last.date))}.</p>` : ''}`;
     }
     return `<article class="card" id="card-bp"><h2>Tensión</h2>${body}
       <div class="actions"><button class="btn primary" data-act="add-bp">Apuntar tensión</button></div></article>`;
   }
 
+  /** Cambio del ÚLTIMO peso frente al peso más cercano que tenga al menos `days` días de antigüedad respecto a él. */
   function weightChange(days) {
     const w = model.weights;
     if (!w.length) return null;
     const last = w[w.length - 1];
     const ref = M.weightAtOrBefore(w, M.addDays(last.date, -days));
-    if (!ref || ref.date === last.date) return null;
-    return { d: last.kg - ref.kg, from: ref.date, days: M.diffDays(last.date, ref.date) };
+    if (!ref) return null;
+    return { d: last.kg - ref.kg, from: ref.date, days: M.diffDays(last.date, ref.date), last };
   }
   function cardWeight() {
     const w = model.weights;
@@ -136,21 +138,25 @@
     const last = w[w.length - 1];
     const imc = last.kg / ((HEIGHT() / 100) ** 2);
     const c7 = weightChange(7), c30 = weightChange(30);
-    const chg = (c) => (c ? `${signed(c.d)}${NB}kg` : '—');
     const toGoal = last.kg - GOAL();
     const waist = model.waists[model.waists.length - 1];
-    const since = (c) => (c.days <= 8 ? 'en la última semana' : `desde el ${esc(M.shortDate(c.from))}`);
-    let plain = c7
-      ? (Math.abs(c7.d) < 0.2 ? `Tu peso casi no ha cambiado ${since(c7)}.` : c7.d < 0 ? `Has bajado ${fmtN1(-c7.d)}${NB}kg ${since(c7)}.` : `Has subido ${fmtN1(c7.d)}${NB}kg ${since(c7)}.`)
-      : 'Apunta tu peso una vez por semana para ver cómo evoluciona.';
+    const stat = (c, target, word, none) => (c
+      ? `<div class="stat"><b>${signed(c.d)}${NB}kg</b><span>${c.days <= target + 2 ? `frente a hace ${word}` : `frente al ${esc(M.shortDate(c.from))} (hace ${c.days} días)`}</span></div>`
+      : `<div class="stat"><b>—</b><span>${none}</span></div>`);
+    // El texto llano usa EXACTAMENTE la misma comparación (c7) que la primera cifra.
+    let plain;
+    if (c7) {
+      const sp = c7.days <= 9 ? 'en la última semana' : `desde el ${esc(M.shortDate(c7.from))} (hace ${c7.days} días)`;
+      plain = Math.abs(c7.d) < 0.2 ? `Tu peso casi no ha cambiado ${sp}.` : c7.d < 0 ? `Has bajado ${fmtN1(-c7.d)}${NB}kg ${sp}.` : `Has subido ${fmtN1(c7.d)}${NB}kg ${sp}.`;
+    } else plain = 'Sin dato de hace una semana para comparar. Apunta tu peso una vez por semana para ver cómo evoluciona.';
     const age = M.diffDays(M.today(), last.date);
     if (age > 8) plain += ` Hace ${age} días de tu último peso: pésate esta semana.`;
     return `<article class="card" id="card-weight"><h2>Peso <span class="tag">${esc(M.shortDate(last.date))}</span></h2>
       <div class="big"><span class="num">${fmtN1(last.kg)}</span><span class="unit">kg</span></div>
       <p class="plain">${plain}</p>
       <div class="stats">
-        <div class="stat"><b>${chg(c7)}</b><span>frente a hace 7 días</span></div>
-        <div class="stat"><b>${chg(c30)}</b><span>frente a hace 30 días</span></div>
+        ${stat(c7, 7, 'una semana', 'sin dato de hace una semana')}
+        ${stat(c30, 30, 'un mes', 'sin dato de hace un mes')}
         <div class="stat"><b>${fmtN1(imc)}</b><span>IMC (peso según tu altura)</span></div>
         <div class="stat"><b>${toGoal > 0 ? fmtN1(toGoal) + NB + 'kg' : '¡Meta!'}</b><span>${toGoal > 0 ? `para llegar a ${fmtN(GOAL())}${NB}kg` : `ya estás en ${fmtN(GOAL())}${NB}kg o menos`}</span></div>
         ${waist ? `<div class="stat"><b>${fmtN1(waist.cm)}${NB}cm</b><span>cintura, ${esc(M.shortDate(waist.date))}</span></div>` : ''}
@@ -167,7 +173,7 @@
       const g = by(k);
       if (!g) return `<div class="stat"><b>—</b><span>${label}</span></div>`;
       const gi = M.glucoseInfo(k, g.mgdl);
-      return `<div class="stat"><b>${g.mgdl}</b><span>${label}<br><span class="pill ${gi.cls}" style="padding:1px 8px;font-size:12px"><i></i>${gi.label}</span></span></div>`;
+      return `<div class="stat"><b>${g.mgdl}</b><span>${label}<br><span class="pill sm ${gi.cls}"><i></i>${gi.label}</span></span></div>`;
     }).join('');
     let alerts = '';
     for (const g of todays) {
@@ -325,19 +331,17 @@
     const t = M.today();
     const cur = weeks[weeks.length - 1], prev = weeks[weeks.length - 2];
     const parts = [];
-    // Peso: primera medida de las últimas 3 semanas frente a la última
+    // Peso: la misma comparación que la tarjeta de Hoy (último peso frente al más cercano de ≥ 7 días antes)
     const w = model.weights;
     if (w.length) {
       const last = w[w.length - 1];
-      const far = w.filter((x) => M.diffDays(last.date, x.date) >= 5);
-      const ref = far.find((x) => x.date >= M.addDays(t, -21)) || far[far.length - 1];
-      if (ref) {
-        const d = last.kg - ref.kg, wk = Math.max(1, Math.round(M.diffDays(last.date, ref.date) / 7));
-        const span = wk === 1 ? 'una semana' : `${wk} semanas`;
-        if (d <= -0.2) parts.push(`Vas bien: has bajado ${fmtN1(-d)}${NB}kg en ${span}.`);
-        else if (d >= 0.2) parts.push(`Tu peso ha subido ${fmtN1(d)}${NB}kg en ${span}.`);
-        else parts.push(`Tu peso casi no ha cambiado en ${span}.`);
-      } else parts.push(`Tu último peso es ${fmtN1(last.kg)}${NB}kg. Apúntalo cada semana para ver la evolución.`);
+      const c = weightChange(7);
+      if (c) {
+        const sp = c.days <= 9 ? 'en la última semana' : `desde el ${M.shortDate(c.from)} (hace ${c.days} días)`;
+        if (c.d <= -0.2) parts.push(`Vas bien: has bajado ${fmtN1(-c.d)}${NB}kg ${sp}.`);
+        else if (c.d >= 0.2) parts.push(`Tu peso ha subido ${fmtN1(c.d)}${NB}kg ${sp}.`);
+        else parts.push(`Tu peso casi no ha cambiado ${sp}.`);
+      } else parts.push(`Tu último peso es ${fmtN1(last.kg)}${NB}kg. Aún no hay un dato de hace una semana para comparar; apúntalo cada semana.`);
     }
     // Tensión
     if (cur.bpN) {
@@ -391,7 +395,7 @@
     const firstKg = weeks.find((w) => w.kg != null);
     charts.push(chartCard({
       title: 'Peso', labels, type: 'line', connect: true, minSpan: 2, fmtVal: (v) => fmtN1(v),
-      sentence: kw ? (firstKg && firstKg !== kw ? `Pasas de ${fmtN1(firstKg.kg)} a ${fmtN1(kw.kg)}${NB}kg (${signed(kw.kg - firstKg.kg)}${NB}kg).` : `Último peso: ${fmtN1(kw.kg)}${NB}kg. La meta son ${fmtN(GOAL())}${NB}kg.`) : 'Aún no hay pesos en estas semanas.',
+      sentence: kw ? (firstKg && firstKg !== kw ? `Último peso de cada semana: de ${fmtN1(firstKg.kg)}${NB}kg (semana del ${firstKg.label}) a ${fmtN1(kw.kg)}${NB}kg (semana del ${kw.label}).` : `Último peso: ${fmtN1(kw.kg)}${NB}kg. La meta son ${fmtN(GOAL())}${NB}kg.`) : 'Aún no hay pesos en estas semanas.',
       alt: kw ? `Último peso ${fmtN1(kw.kg)} kilos.` : '',
       series: [{ name: 'Peso (kg), último de la semana', color: 'var(--s1)', vals: weeks.map((w) => w.kg) }]
     }));
@@ -519,12 +523,81 @@
       <article class="card wide"><h2>Aviso médico</h2><div class="notice"><p>Mi salud es orientativa y no sustituye a tu médico ni a tu endocrino. No diagnostica nada. Si tienes dudas sobre tu tensión, tu glucosa o tu medicación (también Ozempic: si dejaste de tomarlo, no lo retomes sin hablar con tu médico), consúltalas con él. Si notas mareo, dolor en el pecho o malestar fuerte, llama a tu médico o al 112.</p></div></article></div>`;
   }
 
+
+  /* ================= Reparto en columnas (masonry) =================
+   * En el interior del Duo (y donde quepan 2–3 columnas) cada tarjeta va a la columna más corta, en orden lógico
+   * (Tensión, Peso, Glucosa, Movimiento…), así no quedan huecos bajo las tarjetas cortas. Las tarjetas «wide»
+   * (avisos, resumen) ocupan todo el ancho. Con una sola columna no se toca nada. Se rehace al girar o plegar. */
+  const MQ_WIDE = window.matchMedia('(min-width: 600px)');
+  const MQ_INTERIOR = window.matchMedia('(min-width: 600px) and (min-height: 560px)');
+  function colsFor(el) {
+    const gap = parseFloat(getComputedStyle(el).columnGap) || 14;
+    if (el.classList.contains('two')) return MQ_WIDE.matches ? 2 : 1;
+    if (!MQ_INTERIOR.matches) return 1;
+    const min = el.classList.contains('days') ? 280 : 260;
+    return Math.max(1, Math.min(3, Math.floor((el.clientWidth + gap) / (min + gap))));
+  }
+  function layoutContainer(el) {
+    // 1) deshacer: devolver las tarjetas a su sitio original, en su orden
+    if (!el.dataset.o) {
+      let i = 0;
+      for (const c of Array.from(el.children)) if (!c.classList.contains('wide')) c.dataset.o = String(i++);
+      el.dataset.o = '1';
+    }
+    for (const m of Array.from(el.querySelectorAll(':scope > .mason'))) {
+      const cards = Array.from(m.querySelectorAll('.mcol > [data-o]')).sort((a, b) => a.dataset.o - b.dataset.o);
+      for (const c of cards) el.insertBefore(c, m);
+      m.parentNode.removeChild(m);
+    }
+    const cols = colsFor(el);
+    el.dataset.cols = String(cols);
+    if (cols < 2) return;
+    // 2) agrupar tramos consecutivos de tarjetas normales y repartirlos
+    const kids = Array.from(el.children);
+    for (let i = 0; i < kids.length; i++) {
+      if (kids[i].classList.contains('wide')) continue;
+      const run = [];
+      let j = i;
+      while (j < kids.length && !kids[j].classList.contains('wide')) run.push(kids[j++]);
+      const m = document.createElement('div');
+      m.className = 'mason';
+      const cs = [];
+      for (let k = 0; k < cols; k++) { const c = document.createElement('div'); c.className = 'mcol'; m.appendChild(c); cs.push(c); }
+      el.insertBefore(m, run[0]);
+      for (const card of run) {
+        let best = cs[0];
+        for (const c of cs) if (c.offsetHeight < best.offsetHeight - 1) best = c;
+        best.appendChild(card);
+      }
+      i = j - 1;
+    }
+  }
+  function layoutMasonry() {
+    const panel = $('#panel-' + tab);
+    if (panel) $$('.cards, .days', panel).forEach(layoutContainer);
+  }
+  let lastLayoutKey = '';
+  function relayout(force) {
+    const panel = $('#panel-' + tab);
+    if (!panel) return;
+    const key = [tab, MQ_WIDE.matches, MQ_INTERIOR.matches, Math.round(panel.clientWidth)].join('|');
+    if (!force && key === lastLayoutKey) return;
+    lastLayoutKey = key;
+    layoutMasonry();
+  }
+  let rl = 0;
+  const scheduleRelayout = () => { cancelAnimationFrame(rl); rl = requestAnimationFrame(() => relayout(false)); };
+  window.addEventListener('resize', scheduleRelayout);
+  window.addEventListener('orientationchange', scheduleRelayout);
+  if (window.ResizeObserver) new ResizeObserver(scheduleRelayout).observe($('main'));
+
   /* ================= Render ================= */
   function renderTab() {
     if (tab === 'hoy') renderHoy();
     else if (tab === 'tendencia') renderTendencia();
     else if (tab === 'historial') renderHistorial();
     else renderMas();
+    relayout(true);
   }
   function renderAll() { renderHeader(); renderTab(); }
 
@@ -741,15 +814,15 @@
       case 'del-move': delConfirm('este movimiento', () => { M.D.activity = M.D.activity.filter((x) => x.id !== id); }); break;
       case 'med-take': M.setTaken(id, b.dataset.date, true); afterChange(); toast('Marcada como tomada'); break;
       case 'med-untake': M.setTaken(id, b.dataset.date, false); afterChange(); break;
-      case 'range': weeksRange = parseInt(b.dataset.n, 10); renderTendencia(); break;
-      case 'more-hist': histDays += 30; renderHistorial(); break;
+      case 'range': weeksRange = parseInt(b.dataset.n, 10); renderTendencia(); relayout(true); break;
+      case 'more-hist': histDays += 30; renderHistorial(); relayout(true); break;
       case 'go-mas': e.preventDefault(); showTab('mas'); setTimeout(() => { const c = $('#card-sources'); if (c) c.scrollIntoView(); }, 50); break;
       case 'import-others': $('#file-others').click(); break;
       case 'import-own': $('#file-own').click(); break;
       case 'export': {
         const p = M.exportPayload();
         const n = M.nowParts().date;
-        download(`mi-salud-${n}.json`, JSON.stringify(p, null, 2)); toast('Copia exportada'); renderMas(); break;
+        download(`mi-salud-${n}.json`, JSON.stringify(p, null, 2)); toast('Copia exportada'); renderMas(); relayout(true); break;
       }
       case 'wipe':
         if (await confirmDlg('¿Borrar lo que has apuntado?', '<p>Se borrarán de este dispositivo tus apuntes, medicación e importaciones. Los datos precargados volverán a aparecer. Exporta antes una copia si la quieres.</p>', 'Borrar', true)) {
@@ -809,7 +882,7 @@
     if (!e.key || e.key === M.ROOT_KEY || /^mi-(tension|entrenador|menu|plato)/.test(e.key)) afterChange();
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { model = M.build(); renderAll(); } });
-  setInterval(() => { if (!document.hidden && tab === 'hoy' && !document.querySelector('dialog[open]')) { model = M.build(); renderHoy(); renderHeader(); } }, 60000);
+  setInterval(() => { if (!document.hidden && tab === 'hoy' && !document.querySelector('dialog[open]')) { model = M.build(); renderHoy(); relayout(true); renderHeader(); } }, 60000);
 
   showTab('hoy', false);
 

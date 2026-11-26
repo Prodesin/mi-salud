@@ -1,7 +1,7 @@
 /* Service worker de «Mi salud».
  * App shell: precache + cache-first. Para publicar una versión nueva, sube CACHE_VERSION:
  * las cachés antiguas se borran al activarse. */
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const PREFIX = 'mi-salud-';
 const CACHE = `${PREFIX}${CACHE_VERSION}`;
 const SHELL = [

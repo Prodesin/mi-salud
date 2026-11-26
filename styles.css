@@ -78,7 +78,11 @@ main { padding: 8px calc(var(--inset-r) + var(--pad-r)) 0 calc(var(--inset-l) + 
 /* ---------- Cuadrículas de tarjetas ---------- */
 .cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap-y); align-items: start; }
 .cards > .wide { grid-column: 1 / -1; }
-.card { background: var(--card); border-radius: 22px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+/* Varias columnas: las crea app.js (masonry); cada tarjeta va a la columna más corta, sin huecos. */
+.mason { display: flex; align-items: flex-start; gap: var(--gap-y) var(--gap); min-width: 0; }
+.mcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: var(--gap-y); }
+.cards > .mason, .days > .mason { grid-column: 1 / -1; }
+.card { background: var(--card); border-radius: 22px; padding: 18px; box-shadow: var(--shadow); min-width: 0; container: card / inline-size; }
 .card h2 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
 .card h2 .tag { font-size: 13px; font-weight: 600; color: var(--muted); }
 .hint { color: var(--muted); font-size: 15px; }
@@ -92,12 +96,23 @@ main { padding: 8px calc(var(--inset-r) + var(--pad-r)) 0 calc(var(--inset-l) + 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 10px 0; }
 .stats.t3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .stats.t3 .stat { padding: 10px 8px; }
-.stat { background: var(--card2); border-radius: 14px; padding: 10px 12px; min-width: 0; }
-.stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.stat span { font-size: 13px; color: var(--muted); }
+/* Cada mini-caja es su propio contenedor: la cifra se encoge (nunca se sale ni se parte) según el ancho de SU caja. */
+.stat { background: var(--card2); border-radius: 14px; padding: 10px 12px; min-width: 0; container: stat / inline-size; }
+.stat b { display: block; font-size: clamp(14px, 17cqw, 20px); font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.25; }
+.stat span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+/* Tarjetas estrechas (< 320 px de ancho útil): las 3 mini-cajas pasan a filas «etiqueta … valor», sin recortes. */
+@container card (max-width: 319px) {
+  .stats.t3 { grid-template-columns: minmax(0, 1fr); }
+  .stats.t3 .stat { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; }
+  .stats.t3 .stat b { font-size: 20px; flex: none; }
+  .stats.t3 .stat span { flex: 1 1 auto; min-width: 0; }
+}
 
 .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px 4px 10px; border-radius: 999px; font-size: 14px; font-weight: 700; line-height: 1.2;
   border: 1.5px solid var(--c); background: color-mix(in srgb, var(--c) 14%, var(--card)); }
+.pill { white-space: nowrap; }
+.pill.sm { gap: 5px; padding: 2px 8px 2px 7px; font-size: 12px; margin-top: 2px; }
+.pill.sm i { width: 8px; height: 8px; }
 .pill i { width: 11px; height: 11px; border-radius: 50%; background: var(--c); flex: none; }
 .c-baja { --c: var(--c-baja); } .c-optima { --c: var(--c-optima); } .c-normal { --c: var(--c-normal); } .c-above { --c: var(--c-above); }
 .c-g1 { --c: var(--c-g1); } .c-g2 { --c: var(--c-g2); } .c-g3 { --c: var(--c-g3); }
@@ -164,7 +179,7 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .med-sub { color: var(--muted); font-size: 14px; }
 .med .inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .med select { width: auto; min-height: 44px; }
-.badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: var(--card2); color: var(--muted); }
+.badge { display: inline-block; white-space: nowrap; flex-shrink: 0; font-size: 13px; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: var(--card2); color: var(--muted); }
 .badge.ok { background: color-mix(in srgb, var(--ok) 18%, var(--card)); color: var(--ok); }
 
 /* ---------- Barras de progreso ---------- */
@@ -297,13 +312,6 @@ dialog p { margin-bottom: 8px; }
 @media (min-width: 600px) and (min-height: 560px) {
   :root { --gap: 16px; --gap-y: 14px; }
   .app-header h1 { font-size: 34px; }
-  .cards { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .cards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .days { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; }
-}
-/* Exterior horizontal ancho (678×466): dos columnas si cabe */
-@media (min-width: 600px) and (max-height: 559px) {
-  .cards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
