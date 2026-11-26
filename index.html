@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es-ES">
+<head>
+  <meta charset="utf-8">
+  <title>Mi salud</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Panel diario de salud: tensión, peso, glucosa, movimiento y medicación. Orientativo: no sustituye a tu médico.">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Mi salud">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <h1 id="title">Hoy</h1>
+      <p id="subtitle" class="subtitle"></p>
+    </header>
+
+    <main>
+      <section id="panel-hoy" class="panel" role="tabpanel" aria-labelledby="tab-hoy"></section>
+      <section id="panel-tendencia" class="panel" role="tabpanel" aria-labelledby="tab-tendencia" hidden></section>
+      <section id="panel-historial" class="panel" role="tabpanel" aria-labelledby="tab-historial" hidden></section>
+      <section id="panel-mas" class="panel" role="tabpanel" aria-labelledby="tab-mas" hidden></section>
+    </main>
+    <p class="disclaimer">Orientativo: no sustituye a tu médico.</p>
+  </div>
+
+  <nav class="tabbar" role="tablist" aria-label="Secciones">
+    <button role="tab" id="tab-hoy" data-tab="hoy" aria-selected="true" aria-controls="panel-hoy">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.3A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.6c0 5.7-7.5 10.3-7.5 10.3z"/><path d="M7 12h3l1.5-2.5 2 5 1.5-2.5H17"/></svg>
+      <span>Hoy</span>
+    </button>
+    <button role="tab" id="tab-tendencia" data-tab="tendencia" aria-selected="false" aria-controls="panel-tendencia">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17.5l5-5 3.5 3.5 8-8.5"/><path d="M15 7.5h5v5"/></svg>
+      <span>Tendencia</span>
+    </button>
+    <button role="tab" id="tab-historial" data-tab="historial" aria-selected="false" aria-controls="panel-historial">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="3"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4"/></svg>
+      <span>Historial</span>
+    </button>
+    <button role="tab" id="tab-mas" data-tab="mas" aria-selected="false" aria-controls="panel-mas">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+      <span>Más</span>
+    </button>
+  </nav>
+
+  <!-- ===== Diálogos (fijos: no se recrean al refrescar, no se pierde lo escrito) ===== -->
+  <dialog id="dlg-bp">
+    <form method="dialog" id="form-bp" novalidate>
+      <h2 data-title>Apuntar tensión</h2>
+      <div class="row3">
+        <label class="field"><span>Alta</span><input class="num-in" name="sys" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="120" autocomplete="off"></label>
+        <label class="field"><span>Baja</span><input class="num-in" name="dia" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="80" autocomplete="off"></label>
+        <label class="field"><span>Pulso</span><input class="num-in" name="pul" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="70" autocomplete="off"></label>
+      </div>
+      <div class="row2">
+        <label class="field"><span>Fecha</span><input name="date" type="date"></label>
+        <label class="field"><span>Hora</span><input name="time" type="time"></label>
+      </div>
+      <label class="field"><span>Nota <small>(opcional)</small></span><input name="note" type="text" maxlength="300" placeholder="Ej.: después de caminar" autocomplete="off"></label>
+      <div class="errors" role="alert"></div>
+      <div class="btn-row"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-weight">
+    <form method="dialog" id="form-weight" novalidate>
+      <h2 data-title>Apuntar peso</h2>
+      <div class="row2">
+        <label class="field" data-f="kg"><span>Peso (kg)</span><input class="num-in" name="kg" type="text" inputmode="decimal" maxlength="6" placeholder="93,4" autocomplete="off"></label>
+        <label class="field" data-f="cm"><span>Cintura (cm) <small>(opcional)</small></span><input class="num-in" name="cm" type="text" inputmode="decimal" maxlength="6" placeholder="104,6" autocomplete="off"></label>
+      </div>
+      <label class="field"><span>Fecha</span><input name="date" type="date"></label>
+      <div class="errors" role="alert"></div>
+      <div class="btn-row"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-glucose">
+    <form method="dialog" id="form-glucose" novalidate>
+      <h2 data-title>Apuntar glucosa</h2>
+      <fieldset class="field kinds"><legend>¿Cuándo?</legend>
+        <label class="chip"><input type="radio" name="kind" value="ayunas"><span>En ayunas</span></label>
+        <label class="chip"><input type="radio" name="kind" value="antes"><span>Antes de comer</span></label>
+        <label class="chip"><input type="radio" name="kind" value="despues"><span>Después de comer</span></label>
+      </fieldset>
+      <label class="field"><span>Glucosa (mg/dL)</span><input class="num-in" name="mgdl" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="110" autocomplete="off"></label>
+      <div class="row2">
+        <label class="field"><span>Fecha</span><input name="date" type="date"></label>
+        <label class="field"><span>Hora</span><input name="time" type="time"></label>
+      </div>
+      <div class="errors" role="alert"></div>
+      <div class="btn-row"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-move">
+    <form method="dialog" id="form-move" novalidate>
+      <h2 data-title>Apuntar movimiento</h2>
+      <div class="row2">
+        <label class="field"><span>Caminata (min)</span><input class="num-in" name="min" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="30" autocomplete="off"></label>
+        <label class="field"><span>Distancia (km) <small>(opcional)</small></span><input class="num-in" name="km" type="text" inputmode="decimal" maxlength="6" placeholder="3,5" autocomplete="off"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="strength"><span>He hecho una sesión de fuerza</span></label>
+      <label class="field"><span>Fecha</span><input name="date" type="date"></label>
+      <div class="errors" role="alert"></div>
+      <div class="btn-row"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-med">
+    <form method="dialog" id="form-med" novalidate>
+      <h2 data-title>Medicación</h2>
+      <label class="field"><span>Nombre</span><input name="name" type="text" maxlength="80" placeholder="Ej.: Metformina" autocomplete="off"></label>
+      <label class="field"><span>Dosis <small>(opcional)</small></span><input name="dose" type="text" maxlength="60" placeholder="Ej.: 850 mg" autocomplete="off"></label>
+      <div class="row2">
+        <label class="field"><span>¿Cada cuánto?</span>
+          <select name="freq"><option value="daily">Cada día</option><option value="weekly">Una vez por semana</option></select></label>
+        <label class="field" data-f="weekday"><span>¿Qué día?</span>
+          <select name="weekday"></select></label>
+      </div>
+      <label class="field"><span>Hora aproximada <small>(opcional)</small></span><input name="time" type="time"></label>
+      <label class="check"><input type="checkbox" name="active"><span>La estoy tomando</span></label>
+      <div class="errors" role="alert"></div>
+      <div class="btn-row"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary">Guardar</button></div>
+      <button type="button" class="btn danger-link" data-delete hidden>Borrar esta medicación</button>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-confirm">
+    <form method="dialog">
+      <h2 data-title>¿Seguro?</h2>
+      <div data-body></div>
+      <div class="btn-row"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary" data-ok>Aceptar</button></div>
+    </form>
+  </dialog>
+
+  <input id="file-others" type="file" accept="application/json,.json" multiple hidden>
+  <input id="file-own" type="file" accept="application/json,.json" hidden>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript><p style="padding:24px">Mi salud necesita JavaScript.</p></noscript>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
