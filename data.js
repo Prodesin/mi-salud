@@ -193,8 +193,8 @@
     return out;
   }
   function cleanReading(x) {
-    if (x && !isNaN(Date.parse(x.datetime)) && inRange(x.systolic, 70, 250) && inRange(x.diastolic, 40, 150) && inRange(x.pulse, 30, 200) && x.systolic > x.diastolic) {
-      return { id: typeof x.id === 'string' ? x.id : '', datetime: x.datetime, systolic: x.systolic, diastolic: x.diastolic, pulse: x.pulse, note: String(x.note || '').slice(0, 300) };
+    if (x && !isNaN(Date.parse(x.datetime)) && inRange(x.systolic, 70, 250) && inRange(x.diastolic, 40, 150) && (x.pulse == null || inRange(x.pulse, 30, 200)) && x.systolic > x.diastolic) {
+      return { id: typeof x.id === 'string' ? x.id : '', datetime: x.datetime, systolic: x.systolic, diastolic: x.diastolic, pulse: x.pulse == null ? null : x.pulse, note: String(x.note || '').slice(0, 300) };
     }
     return null;
   }
@@ -244,6 +244,32 @@
     const j = readKey('mi-tension:v1');
     if (!j || !Array.isArray(j.readings)) return null;
     return { readings: j.readings.map(cleanReading).filter(Boolean) };
+  }
+  /** Tensión leída del backend «Mis apps» (Mac de casa) por GET, solo lectura. Nunca escribe en mi-tension:v1.
+   *  Se guarda la última respuesta en una clave propia para poder verla sin conexión. */
+  const TENSION_API = 'https://air-prodesin.tail7b1127.ts.net:8445/api/mi-tension/medidas';
+  const TENSION_CACHE = 'mi-salud:tension-api';
+  let remote = (() => { const j = readKey(TENSION_CACHE); return j && Array.isArray(j.readings) ? { at: j.at || null, readings: j.readings.map(cleanReading).filter(Boolean) } : null; })();
+  function remoteTension() { return remote; }
+  /** Pide las lecturas al backend. Devuelve true si ha cambiado algo. Si falla la red, sigue con lo local. */
+  async function fetchTension(fetchFn) {
+    const f = fetchFn || (typeof fetch === 'function' ? fetch : null);
+    if (!f) return false;
+    const url = location.origin === 'https://air-prodesin.tail7b1127.ts.net:8445' ? '/api/mi-tension/medidas' : TENSION_API;
+    try {
+      const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      const t = ctl ? setTimeout(() => ctl.abort(), 8000) : null;
+      const res = await f(url, { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+      if (t) clearTimeout(t);
+      if (!res.ok) return false;
+      const j = await res.json();
+      if (!j || !Array.isArray(j.readings)) return false;
+      const readings = j.readings.map(cleanReading).filter(Boolean).slice(0, 20000);
+      const antes = JSON.stringify(remote && remote.readings);
+      remote = { at: new Date().toISOString(), readings };
+      try { localStorage.setItem(TENSION_CACHE, JSON.stringify(remote)); } catch (e) { /* sin sitio: solo en memoria */ }
+      return JSON.stringify(readings) !== antes;
+    } catch (e) { return false; }
   }
   function liveEntrenador() {
     const j = readKey('mi-entrenador:v1');
@@ -354,12 +380,12 @@
 
   /* ================= Fusión de todas las fuentes, sin contar nada dos veces ================= */
   const SRC = {
-    manual: 'Apuntado aquí', 'tension-live': 'Mi tensión', 'tension-imp': 'Mi tensión (importado)', seed: 'Precargado',
+    manual: 'Apuntado aquí', 'tension-live': 'Mi tensión', 'tension-imp': 'Mi tensión (importado)', 'tension-api': 'Mi tensión (Mac de casa)', seed: 'Precargado',
     'ent-live': 'Mi entrenador', 'ent-imp': 'Mi entrenador (importado)', plato: 'Mi plato', 'plato-imp': 'Mi plato (importado)'
   };
 
   function build() {
-    const lt = liveTension(), le = liveEntrenador(), lm = liveMenu(), lp = livePlato();
+    const lt = liveTension(), rt = remoteTension(), le = liveEntrenador(), lm = liveMenu(), lp = livePlato();
     const it = D.imports.tension, ie = D.imports.entrenador, im = D.imports.menu, ip = D.imports.plato;
 
     // --- Tensión: manual > vivo > importado > precarga. La precarga solo si no hay ninguna copia de Mi tensión
@@ -376,7 +402,8 @@
     D.bp.forEach((r) => addBp(r, 'manual', r.id));
     if (lt) lt.readings.forEach((r) => addBp(r, 'tension-live'));
     if (it) it.readings.forEach((r) => addBp(r, 'tension-imp'));
-    if (!lt && !it) SEED_BP.forEach(([d, t, s, di, p]) => addBp({ id: 'seed-' + d, datetime: toISO(d, t), systolic: s, diastolic: di, pulse: p, note: '' }, 'seed'));
+    if (rt) rt.readings.forEach((r) => addBp(r, 'tension-api'));
+    if (!lt && !it && !rt) SEED_BP.forEach(([d, t, s, di, p]) => addBp({ id: 'seed-' + d, datetime: toISO(d, t), systolic: s, diastolic: di, pulse: p, note: '' }, 'seed'));
     bp.sort((a, b) => a.ts - b.ts);
 
     // --- Mi entrenador: una vista por copia disponible (viva, importada); sin copias, solo la precarga.
@@ -448,7 +475,7 @@
     const goals = { ...(im ? im.goals : {}), ...(lm ? lm.goals : {}) };
 
     const sources = {
-      tension: { live: lt ? lt.readings.length : null, imp: it ? { at: it.at, n: it.readings.length } : null },
+      tension: { api: rt ? rt.readings.length : null, live: lt ? lt.readings.length : null, imp: it ? { at: it.at, n: it.readings.length } : null },
       entrenador: { live: le ? { logs: (le.data['day-logs'] || []).length, weights: (le.data['weight-logs'] || INITIAL_WEIGHTS).length } : null, imp: ie ? { at: ie.at } : null },
       menu: { live: !!lm, imp: im ? { at: im.at } : null },
       plato: { live: !!lp, imp: ip ? { at: ip.at, n: ip.entries.length } : null },
@@ -521,7 +548,7 @@
       weeks.push({
         start, end, current: i === 0, label: shortDate(start),
         bpN: bps.length,
-        sys: mean(bps.map((r) => r.sys)), dia: mean(bps.map((r) => r.dia)), pulse: mean(bps.map((r) => r.pulse)),
+        sys: mean(bps.map((r) => r.sys)), dia: mean(bps.map((r) => r.dia)), pulse: mean(bps.map((r) => r.pulse).filter((p) => p != null)),
         okPct: bps.length ? bps.filter((r) => classify(r.sys, r.dia).ok).length / bps.length : null,
         kg: ws.length ? ws[ws.length - 1].kg : null,
         gFast: mean(fast), gAfter: mean(after), gN: gl.length,
@@ -611,6 +638,7 @@
   window.MS = {
     ROOT_KEY, NB, WEEKDAYS, GLUCOSE_KINDS, SRC, DEFAULT_SETTINGS,
     get D() { return D; },
+    fetchTension, remoteTension, TENSION_API,
     load, save, storageOK, replaceAll, build, exportPayload, parseOwnBackup, importOthers,
     today, nowParts, toISO, nowInputs, isDate, addDays, diffDays, weekdayOf, mondayOf, longDate, shortDate, dateOfISO,
     parseNum, inRange, fmtN, fmtN1, val, signed, esc, newId, classify, glucoseInfo,

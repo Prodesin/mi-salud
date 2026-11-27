@@ -9,7 +9,7 @@
   const HEIGHT = () => M.D.settings.heightCm;
   const WALK_GOAL = 150;
   const LINKS = [
-    ['Mi tensión', 'Registro de tensión arterial', 'https://prodesin.github.io/mi-tension/'],
+    ['Mi tensión', 'Registro de tensión arterial', location.origin === 'https://air-prodesin.tail7b1127.ts.net:8445' ? '/mi-tension/' : 'https://air-prodesin.tail7b1127.ts.net:8445/mi-tension/'],
     ['Mi entrenador', 'Fuerza, caminata y comida', 'https://prodesin.github.io/mi-entrenador/'],
     ['Mi menú', 'Menú semanal y lista de la compra', 'https://prodesin.github.io/mi-menu/'],
     ['Mi plato', 'Apunta lo que comes', 'https://prodesin.github.io/mi-plato/']
@@ -105,13 +105,13 @@
     if (r) {
       const c = M.classify(r.sys, r.dia);
       body = `<div class="big"><span class="num">${r.sys}/${r.dia}</span><span class="unit">mmHg</span></div>
-        <p class="meta">Pulso ${val(r.pulse, 'lpm')} · ${r.time}</p>
+        <p class="meta">Pulso ${r.pulse == null ? '—' : val(r.pulse, 'lpm')} · ${r.time}</p>
         <p class="plain"><span class="pill ${c.cls}"><i></i>${c.label}</span></p>
         <p class="plain">${bpAdvice(c)}</p>`;
     } else {
-      const h = np.hour;
-      const [cls, msg] = h < 13 ? ['soft', 'Hoy toca antes de comer.']
-        : h < 16 ? ['urgent', 'Es la hora: tómatela antes de comer.']
+      const min = np.hour * 60 + np.minute; // desde las 13:30 el aviso es más visible
+      const [cls, msg] = min < 13 * 60 + 30 ? ['soft', 'Hoy toca antes de comer.']
+        : min < 16 * 60 ? ['urgent', 'Es la hora: tómatela antes de comer.']
         : ['soft', 'Hoy aún no la has apuntado. Si te la tomaste, apúntala; si no, mañana antes de comer.'];
       const last = model.bp.filter((x) => x.date < t).pop();
       body = `<div class="notice ${cls}">${msg}</div>
@@ -443,7 +443,7 @@
     for (const r of model.bp) {
       const c = M.classify(r.sys, r.dia);
       add(r.date, { t: r.time, html: `<div class="item"><div class="item-top"><span class="item-what">Tensión · ${r.time}</span><span class="pill ${c.cls}"><i></i>${c.label}</span></div>
-        <div class="item-val">${r.sys}/${r.dia} <small>mmHg · pulso ${r.pulse}</small></div>${r.note ? `<div class="item-src">${esc(r.note)}</div>` : ''}<div class="item-src">${esc(srcLabel(r.src))}</div>${act(r.src, r.manualId, 'edit-bp', 'del-bp')}</div>` });
+        <div class="item-val">${r.sys}/${r.dia} <small>mmHg · pulso ${r.pulse == null ? '—' : r.pulse}</small></div>${r.note ? `<div class="item-src">${esc(r.note)}</div>` : ''}<div class="item-src">${esc(srcLabel(r.src))}</div>${act(r.src, r.manualId, 'edit-bp', 'del-bp')}</div>` });
     }
     for (const w of model.weights) add(w.date, { t: '00:00', html: `<div class="item"><div class="item-top"><span class="item-what">Peso</span></div><div class="item-val">${fmtN1(w.kg)} <small>kg</small></div><div class="item-src">${esc(srcLabel(w.src))}</div>${act(w.src, w.manualId, 'edit-weight', 'del-weight')}</div>` });
     for (const c of model.waists) add(c.date, { t: '00:00', html: `<div class="item"><div class="item-top"><span class="item-what">Cintura</span></div><div class="item-val">${fmtN1(c.cm)} <small>cm</small></div><div class="item-src">${esc(srcLabel(c.src))}</div>${act(c.src, c.manualId, 'edit-waist', 'del-waist')}</div>` });
@@ -475,8 +475,8 @@
   function sourcesCard() {
     const s = model.sources;
     const rows = [];
-    const seedUsed = s.tension.live == null && !s.tension.imp;
-    rows.push(['Mi tensión', s.tension.live != null ? `Leída directamente de este navegador (${s.tension.live} lecturas).` : '', s.tension.imp ? `Importada el ${fmtAt(s.tension.imp.at)} (${s.tension.imp.n} lecturas).` : '', seedUsed ? 'Precargadas: 8 lecturas del 18 al 25 de noviembre.' : '']);
+    const seedUsed = s.tension.live == null && !s.tension.imp && s.tension.api == null;
+    rows.push(['Mi tensión', s.tension.api != null ? `Leída del Mac de casa (${s.tension.api} lecturas).` : '', s.tension.live != null ? `Leída directamente de este navegador (${s.tension.live} lecturas).` : '', s.tension.imp ? `Importada el ${fmtAt(s.tension.imp.at)} (${s.tension.imp.n} lecturas).` : '', seedUsed ? 'Precargadas: 8 lecturas del 18 al 25 de noviembre.' : '']);
     const e = s.entrenador;
     rows.push(['Mi entrenador (peso, caminatas, fuerza, glucosa)', e.live ? `Leído directamente de este navegador (${e.live.logs} días, ${e.live.weights} pesos).` : '', e.imp ? `Importado el ${fmtAt(e.imp.at)}.` : '', !e.live && !e.imp ? 'Precargado: registros y pesos de noviembre.' : '']);
     rows.push(['Mi menú (objetivos de comida)', s.menu.live ? 'Leído directamente de este navegador.' : '', s.menu.imp ? `Importado el ${fmtAt(s.menu.imp.at)}.` : '', !s.menu.live && !s.menu.imp ? 'Sin datos.' : '']);
@@ -629,7 +629,7 @@
     editing = id || null;
     const r = id && M.D.bp.find((x) => x.id === id);
     const n = nowIn();
-    f.elements.sys.value = r ? r.systolic : ''; f.elements.dia.value = r ? r.diastolic : ''; f.elements.pul.value = r ? r.pulse : '';
+    f.elements.sys.value = r ? r.systolic : ''; f.elements.dia.value = r ? r.diastolic : ''; f.elements.pul.value = r && r.pulse != null ? r.pulse : '';
     f.elements.date.value = r ? M.dateOfISO(r.datetime) : n.date; f.elements.time.value = r ? M.nowInputs(new Date(r.datetime)).time : n.time;
     f.elements.note.value = r ? r.note : '';
     showErrs(f, {}); d.showModal();
@@ -885,6 +885,12 @@
   setInterval(() => { if (!document.hidden && tab === 'hoy' && !document.querySelector('dialog[open]')) { model = M.build(); renderHoy(); relayout(true); renderHeader(); } }, 60000);
 
   showTab('hoy', false);
+
+  // Tensión desde el Mac de casa (si hay red). Si falla, se sigue con lo local.
+  const traerTension = async () => { if (await M.fetchTension()) afterChange(); };
+  traerTension();
+  window.addEventListener('online', traerTension);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) traerTension(); });
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
